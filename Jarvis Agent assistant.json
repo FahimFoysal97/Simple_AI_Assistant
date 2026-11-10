@@ -1,0 +1,651 @@
+{
+  "name": "Jarvis Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "1159c1ae-c404-4417-b061-6b3a62b344a8",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -512,
+        96
+      ],
+      "webhookId": "jarvis-agent-telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e9e817c4-f804-43cb-b431-097a06551b7d",
+      "name": "Voice Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        336
+      ],
+      "webhookId": "YOUR_WEBHOOK_UUID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT: put your Telegram user ID between the quotes\nconst ALLOWED = ['YOUR_TELEGRAM_USER_ID'];\nconst j = $input.first().json;\n\n// Local voice script (webhook): body = { text: \"...\" }\nif (j.update_id === undefined) {\n  const b = j.body || {};\n  return [{ json: { source: 'webhook', allowed: true, chatId: null, sessionId: 'voice-main', text: String(b.text || '').trim() } }];\n}\n\n// Telegram\nconst msg = j.message || {};\nconst from = msg.from || {};\nconst text = String(msg.text || msg.caption || '').trim();\nreturn [{ json: {\n  source: 'telegram',\n  allowed: ALLOWED.includes(String(from.id)) && !!text,\n  chatId: msg.chat ? msg.chat.id : null,\n  sessionId: 'tg-' + (msg.chat ? msg.chat.id : 'unknown'),\n  text\n} }];"
+      },
+      "id": "7b3368f4-3196-44a7-b6a4-406cf5f7a9b9",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.allowed }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "066293b6-7096-4cda-9770-8fd9e38828ed",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -32,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "=You are Jarvis, a personal AI assistant for your owner, running on their own PC. Be concise, warm and a little witty. Replies may be spoken aloud, so keep them short and avoid markdown, tables and long lists unless asked.\n\nCurrent date and time: {{ $now.toFormat('cccc, dd LLL yyyy HH:mm') }} (timezone: Asia/Dhaka).\n\nRULES:\n- Use tools when they help. Never invent emails, events, files or results; if a tool fails or returns nothing, say so.\n- For anything that sends, deletes, buys or changes something, first describe exactly what you will do and wait for the user to say yes. Only then act.\n- You can read email and calendar, read the Job Tracker sheet, look up Wikipedia, do math, and control the PC through the pc_control tool.\n- pc_control actions: open_app (arg = app name), open_url (arg = URL), screenshot, volume (arg = 0-100), clipboard_read. Refuse anything outside this list.\n- If you do not know something current, say you would need a search tool.",
+          "maxIterations": 8
+        }
+      },
+      "id": "4c67242b-04be-448f-9410-fab7c9febc66",
+      "name": "Jarvis Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "5c5aaaff-8c92-4e8b-bfe0-b6fb01477433",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        64,
+        496
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini API account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "qwen3:8b",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "2e5b5ad0-4ef4-47bc-b05a-3acd70591a78",
+      "name": "Ollama Fallback Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        224,
+        496
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "YOUR_OLLAMA_CREDENTIAL_ID",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normalize Input').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "id": "4a6423b6-18c6-4afe-a4b2-c88b09715720",
+      "name": "Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        384,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Read emails from Gmail. Use a Gmail search query such as 'is:unread' or 'from:someone@example.com'. Read only.",
+        "operation": "getAll",
+        "limit": 5,
+        "filters": {
+          "q": "=={{ $fromAI('query', 'Gmail search query, for example is:unread', 'string', 'in:inbox') }}"
+        }
+      },
+      "id": "9b19c96e-f32a-442f-8dfe-2ecca2d198e9",
+      "name": "Read Gmail",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [
+        544,
+        496
+      ],
+      "webhookId": "47886c1e-d634-4a86-80cd-ab53e16605a3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Get events from the user's Google Calendar between two date-times (ISO 8601). Read only.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary"
+        },
+        "limit": 10,
+        "timeMin": "={{ $fromAI('start', 'Start date-time in ISO 8601', 'string', $now.startOf('day').toISO()) }}",
+        "timeMax": "={{ $fromAI('end', 'End date-time in ISO 8601', 'string', $now.plus({ days: 1 }).startOf('day').toISO()) }}",
+        "options": {}
+      },
+      "id": "a0a2298e-b607-45cd-81da-683da2adba9e",
+      "name": "Read Calendar",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        496
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "YOUR_CALENDAR_CREDENTIAL_ID",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Read all rows of the Job Tracker 'Applications' sheet (job applications and their status). Read only.",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Job Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 245350092,
+          "mode": "list",
+          "cachedResultName": "Applications",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID/edit#gid=245350092"
+        },
+        "options": {}
+      },
+      "id": "642bf9dc-1de2-4928-9c70-a2a54b5d375a",
+      "name": "Read Job Tracker",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [
+        864,
+        496
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Control the user's PC. action must be one of: open_app, open_url, screenshot, volume, clipboard_read. arg is the app name, URL or volume level (0-100); leave empty if not needed.",
+        "method": "POST",
+        "url": "http://127.0.0.1:8787/action",
+        "sendHeaders": true,
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-Api-Key",
+              "valueProvider": "fieldValue",
+              "value": "YOUR_PC_CONTROL_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "  {\n    \"action\": \"{action}\",\n    \"arg\": \"{arg}\"\n  }",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "action",
+              "description": "One of: open_app, open_url, screenshot, volume, clipboard_read, lock",
+              "type": "string"
+            },
+            {
+              "name": "arg",
+              "description": "App name for open_app, website for open_url, a number 0 to 100 for volume, or none for other actions",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "92cfe4c5-1cfd-4b91-bece-cb001772a3ad",
+      "name": "pc_control",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1024,
+        496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7af40dc4-4177-4a4a-bdbe-898a56cd0dfb",
+      "name": "Wikipedia",
+      "type": "@n8n/n8n-nodes-langchain.toolWikipedia",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a014e2ec-c1e6-4719-acfa-374cc782e731",
+      "name": "Calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Normalize Input').first().json.source }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "telegram"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1cf97c53-7c1f-4923-ad52-d33e3b957d26",
+      "name": "From Telegram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        544,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalize Input').first().json.chatId }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2342baa6-3abd-4109-a59b-5733508a4017",
+      "name": "Reply on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        992,
+        112
+      ],
+      "webhookId": "YOUR_TELEGRAM_REPLY_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.output }) }}",
+        "options": {}
+      },
+      "id": "2a6d0ea9-9aa0-4e59-9f86-944e37846618",
+      "name": "Respond to Voice Script",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        784,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "   const raw = String($input.first().json.output || '');\n   const clean = raw\n     .replace(/_/g, ' ')          // open_app -> open app\n     .replace(/[*`~\\[\\]]/g, '')   // remove markdown characters\n     .trim();\n   return [{ json: { output: clean } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        112
+      ],
+      "id": "8686cc04-4528-46e9-9616-a512703be4b5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Open an application on the PC. Allowed apps: notepad, calculator, chrome, vscode, explorer, paint, terminal, task manager",
+        "method": "POST",
+        "url": "http://127.0.0.1:8787/action",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "YOUR_PC_CONTROL_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "action",
+              "value": "open_app"
+            },
+            {
+              "name": "arg",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        704,
+        704
+      ],
+      "id": "89876ec0-ddf9-4055-a4c7-3ab18c917151",
+      "name": "open_app"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jarvis Agent": {
+      "main": [
+        [
+          {
+            "node": "From Telegram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Telegram?": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Voice Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Fallback Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Gmail": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Calendar": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Job Tracker": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "pc_control": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wikipedia": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Jarvis Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Reply on Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "open_app": {
+      "ai_tool": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "sanitized",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "sanitized"
+  },
+  "nodeGroups": [],
+  "id": "sanitized",
+  "tags": []
+}
